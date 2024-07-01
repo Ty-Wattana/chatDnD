@@ -1,5 +1,4 @@
 from langchain_community.llms import Ollama
-from langchain_chroma import Chroma
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMChain
@@ -11,8 +10,8 @@ llm = Ollama(
 )
 
 # simple memory system
-db = Chroma()
-chat_history = ChatMessageHistory(retriever=db)
+
+chat_history = ChatMessageHistory()
 
 buff_memory = ConversationBufferMemory(
     memory_key="chat_history",
