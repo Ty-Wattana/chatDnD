@@ -1,24 +1,16 @@
 from langchain_community.llms import Ollama
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import LLMChain
-from langchain_core.prompts import PromptTemplate
+from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_core.prompts import MessagesPlaceholder, ChatPromptTemplate
+from langchain_core.runnables.history import RunnableWithMessageHistory
 
 # llm init
 llm = Ollama(
+    # model="gemma2:27b"
     model="llama3"
 )
 
-# simple memory system
 
-chat_history = ChatMessageHistory()
-
-buff_memory = ConversationBufferMemory(
-    memory_key="chat_history",
-    chat_memory=chat_history
-)
-
-template = """
+system_message = """
 You are now the guide of a mystical journey in the Whispering Woods. 
 A traveler named Elara seeks the lost Gem of Serenity. 
 You must navigate her through challenges, choices, and consequences, 
@@ -29,33 +21,42 @@ leads to a new path, ultimately determining Elara's fate.
 Here are some rules to follow:
 1. Start by asking the player to choose some kind of weapons that will be used later in the game
 2. Have a few paths that lead to success
-3. Have some paths that lead to death. If the user dies generate a response that explains the death and ends in the text: "The End.", I will search for this text to end the game
+3. Have some paths that lead to death. If the user dies generate a response that explains the death and ends in the text: "THE END" in all capital letters, I will search for this text to end the game
+"""
 
-Here is the chat history, use this to understand what to say next: {chat_history}
-Human: {human_input}
-AI:"""
-
-prompt = PromptTemplate(
-    input_variables=["chat_history", "human_input"],
-    template=template
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", system_message),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{human_input}"),
+    ]
 )
 
-llm_chain = LLMChain(
-    llm=llm,
-    prompt=prompt,
-    memory=buff_memory
+chain = prompt | llm
+
+# simple memory system
+
+chain_with_history = RunnableWithMessageHistory(
+    chain,
+    lambda session_id: SQLChatMessageHistory(
+        session_id=session_id, connection_string="sqlite:///sqlite.db"
+    ),
+    input_messages_key="human_input",
+    history_messages_key="chat_history",
 )
 
-# response = llm_chain.predict(human_input="start the game")
-# print(response)
+chat_message_history = SQLChatMessageHistory(session_id="chat_hist_id", connection_string="sqlite:///sqlite.db")
+chat_message_history.clear()
 
+config = {"configurable": {"session_id": "chat_hist_id"}}
 choice = "start"
 
 while True:
-    response = llm_chain.predict(human_input=choice)
+    response = chain_with_history.invoke({"human_input": choice},config=config)
     print(response.strip())
 
-    if "The End." in response:
+    if "THE END" in response:
+        chat_message_history.clear()
         break
 
     choice = input("Your reply: ")
